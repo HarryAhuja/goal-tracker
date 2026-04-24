@@ -1,57 +1,96 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
 
 type Goal = {
+  id: number;
   name: string;
-  target: string;
-  funded: string;
+  target: number;
+  funded: number;
 };
 
 export default function Home() {
   const [goals, setGoals] = useState<Goal[]>([]);
 
-  // Load from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem("goals");
-    if (saved) {
-      setGoals(JSON.parse(saved));
+  // Fetch all goals
+  const fetchGoals = async () => {
+    const { data, error } = await supabase
+      .from("goals")
+      .select("*")
+      .order("id", { ascending: true });
+
+    if (error) {
+      console.error(error);
+      return;
     }
-  }, []);
 
-  // Save to localStorage
-  useEffect(() => {
-    localStorage.setItem("goals", JSON.stringify(goals));
-  }, [goals]);
-
-  const addGoal = () => {
-    setGoals([
-      ...goals,
-      { name: "", target: "", funded: "" },
-    ]);
+    setGoals(data || []);
   };
 
-  const updateGoal = (
-    index: number,
+  useEffect(() => {
+    fetchGoals();
+  }, []);
+
+  // Add new goal
+  const addGoal = async () => {
+    const { data, error } = await supabase
+      .from("goals")
+      .insert([{ name: "", target: 0, funded: 0 }])
+      .select();
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    if (data) setGoals([...goals, ...data]);
+  };
+
+  // Update goal
+  const updateGoal = async (
+    id: number,
     field: keyof Goal,
     value: string
   ) => {
-    const updated = [...goals];
-    updated[index][field] = value;
-    setGoals(updated);
+    const parsedValue =
+      field === "name" ? value : Number(value);
+
+    const { error } = await supabase
+      .from("goals")
+      .update({ [field]: parsedValue })
+      .eq("id", id);
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    fetchGoals();
   };
 
-  const deleteGoal = (index: number) => {
-    setGoals(goals.filter((_, i) => i !== index));
+  // Delete goal
+  const deleteGoal = async (id: number) => {
+    const { error } = await supabase
+      .from("goals")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    setGoals(goals.filter((g) => g.id !== id));
   };
 
   const totalTarget = goals.reduce(
-    (sum, g) => sum + (Number(g.target) || 0),
+    (sum, g) => sum + g.target,
     0
   );
 
   const totalFunded = goals.reduce(
-    (sum, g) => sum + (Number(g.funded) || 0),
+    (sum, g) => sum + g.funded,
     0
   );
 
@@ -79,16 +118,16 @@ export default function Home() {
         </button>
 
         <div className="space-y-4">
-          {goals.map((goal, i) => {
-            const target = Number(goal.target) || 0;
-            const funded = Number(goal.funded) || 0;
-            const remaining = target - funded;
+          {goals.map((goal) => {
+            const remaining = goal.target - goal.funded;
             const progress =
-              target > 0 ? (funded / target) * 100 : 0;
+              goal.target > 0
+                ? (goal.funded / goal.target) * 100
+                : 0;
 
             return (
               <div
-                key={i}
+                key={goal.id}
                 className="bg-white p-4 rounded-xl shadow"
               >
                 <div className="grid grid-cols-3 gap-3 mb-3">
@@ -97,7 +136,11 @@ export default function Home() {
                     className="border p-2 rounded"
                     value={goal.name}
                     onChange={(e) =>
-                      updateGoal(i, "name", e.target.value)
+                      updateGoal(
+                        goal.id,
+                        "name",
+                        e.target.value
+                      )
                     }
                   />
 
@@ -107,7 +150,11 @@ export default function Home() {
                     className="border p-2 rounded"
                     value={goal.target}
                     onChange={(e) =>
-                      updateGoal(i, "target", e.target.value)
+                      updateGoal(
+                        goal.id,
+                        "target",
+                        e.target.value
+                      )
                     }
                   />
 
@@ -117,7 +164,11 @@ export default function Home() {
                     className="border p-2 rounded"
                     value={goal.funded}
                     onChange={(e) =>
-                      updateGoal(i, "funded", e.target.value)
+                      updateGoal(
+                        goal.id,
+                        "funded",
+                        e.target.value
+                      )
                     }
                   />
                 </div>
@@ -125,7 +176,7 @@ export default function Home() {
                 <div className="flex justify-between text-sm mb-2">
                   <span>Remaining: ₹{remaining}</span>
                   <button
-                    onClick={() => deleteGoal(i)}
+                    onClick={() => deleteGoal(goal.id)}
                     className="text-red-500"
                   >
                     Delete
